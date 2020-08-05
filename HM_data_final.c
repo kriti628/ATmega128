@@ -1,14 +1,11 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
+uint8_t hmData[18];
+
 volatile uint8_t count;
 volatile uint8_t add = 0, addr = 0;
-volatile uint8_t deploymentStatus;
-volatile uint8_t voltageStatus;
-volatile uint8_t currentStatus;
-volatile uint8_t commData1,commData2;
-volatile uint8_t operationalMode;
-volatile uint8_t timestamp1,timestamp2,timestamp3,timestamp4;
+
 int times=0;
 int repeat=0;
 uint8_t temp = 0x00;
@@ -127,7 +124,7 @@ void i2cStop(void){
 	TWCR=0b10010100;
 }
 
-void adcConvert(uint8_t mux, uint8_t ideal_value){
+void adcConvert(uint8_t mux){
 	/*Writes the adc value into EEPROM
 	*parameters
 	*mux     analog channel
@@ -139,13 +136,8 @@ void adcConvert(uint8_t mux, uint8_t ideal_value){
 	ADCSRA |= (1<<ADSC);
 	//wait for conversion to finish
 	while(!(ADCSRA & (1<<ADIF)));
-	
-	HM_Data=ADCH;
-	
-	if(abs(ADCH - ideal_value) > 0.5)
-	{
-		opMode=Emergency;
-	}
+	//write result into eeprom
+	eepromWrite(ADCH);
 }
 
 void uartInit (void){
@@ -202,25 +194,10 @@ int main(void){
 			eepromWr();
 			address(0x00);
 			address(add);
-			eepromWrite(timestamp1);
-			eepromWrite(timestamp2);
-			eepromWrite(timestamp3);
-			eepromWrite(timestamp4);
-			eepromWrite(operationalMode);
-			eepromWrite(deploymentStatus);
-			eepromWrite(voltageStatus);
-		        //measuring the ADC values and sending them to the EEPROM
-			adcConvert(0x00);
-			adcConvert(0x01);
-			eepromWrite(currentStatus);
-			adcConvert(0x02);
-			adcConvert(0x03);
-			adcConvert(0x04);
-			adcConvert(0x05);
-			adcCconvert(0x06);
-			adcConvert(0x07);
-			eepromWrite(comm_data1);
-			eepromWrite(comm_data2);
+			for (int i=0; i<18 ;i++){
+				eepromWrite(hmData[i]);
+			}
+			
 			i2cStop();
 					
 		}
@@ -234,12 +211,12 @@ ISR(USART0_RX_vect)
 	if (repeat==0)
 	{
 		//reading the data from the USART data register
-		commData1=UDR0;
+		hmData[16]=UDR0;
 		repeat++;
 	}
 	else
 	{
-		commData2=UDR0;
+		hmData[17]=UDR0;
 		repeat=0;
 	}
 }
@@ -251,27 +228,27 @@ ISR(SPI_STC_vect)
 	{
 		//cases 0-4 is getting operational mode and timestamp from PS4 OP microcontroller
 		case 0 :
-		operationalMode=SPDR;
+		hmData[4]=SPDR;
 		times++;
 		break;
 			
 		case 1 :
-		timestamp1=SPDR;
+		hmData[0]=SPDR;
 		times++;
 		break;
 			
 		case 2 :
-		timestamp2=SPDR;
+		hmData[1]=SPDR;
 		times++;
 		break;
 			
 		case 3 :
-		timestamp3=SPDR;
+		hmData[2]=SPDR;
 		times++;
 		break;
 			
 		case 4 :
-		timestamp4=SPDR;
+		hmData[3]=SPDR;
 		times++;
 		break;
 		//this case is for reading the HM data from the EEPROM and sending it to PS4 for telemetry	
@@ -299,31 +276,31 @@ ISR(TIMER1_COMPA_vect)
 
 ISR(INT2_vect)
 {
-	deploymentStatus |= 0x30;
+	hmData[5] |= 0x30;
 }
 
 ISR(INT3_vect)
 {
-	deploymentStatus |= 0x03;
+	hmData[5] |= 0x03;
 }
 
 ISR(INT4_vect)
 {
-	voltageStatus |= 0x30;
+	hmData[6] |= 0x30;
 }
 
 ISR(INT5_vect)
 {
-	voltageStatus |= 0x03;
+	hmData[6] |= 0x03;
 }
 
 ISR(INT6_vect)
 {
-	currentStatus |= 0x30;
+	hmData[9] |= 0x30;
 }
 
 ISR(INT7_vect)
 {
-	currentStatus |= 0x03;
+	hmData[9] |= 0x03;
 }
 
